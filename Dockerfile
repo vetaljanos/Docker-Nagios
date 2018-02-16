@@ -1,26 +1,27 @@
 FROM ubuntu:16.04
 MAINTAINER Jason Rivers <jason@jasonrivers.co.uk>
 
-ENV NAGIOS_HOME            /opt/nagios
-ENV NAGIOS_USER            nagios
-ENV NAGIOS_GROUP           nagios
-ENV NAGIOS_CMDUSER         nagios
-ENV NAGIOS_CMDGROUP        nagios
-ENV NAGIOS_FQDN            nagios.example.com
-ENV NAGIOSADMIN_USER       nagiosadmin
-ENV NAGIOSADMIN_PASS       nagios
-ENV APACHE_RUN_USER        nagios
-ENV APACHE_RUN_GROUP       nagios
-ENV NAGIOS_TIMEZONE        UTC
-ENV DEBIAN_FRONTEND        noninteractive
-ENV NG_NAGIOS_CONFIG_FILE  ${NAGIOS_HOME}/etc/nagios.cfg
-ENV NG_CGI_DIR             ${NAGIOS_HOME}/sbin
-ENV NG_WWW_DIR             ${NAGIOS_HOME}/share/nagiosgraph
-ENV NG_CGI_URL             /cgi-bin
-ENV NAGIOS_BRANCH          nagios-4.3.4
-ENV NAGIOS_PLUGINS_BRANCH  release-2.2.1
-ENV NRPE_BRANCH            nrpe-3.2.1
-
+ENV NAGIOS_HOME=/opt/nagios \
+	NAGIOS_USER=nagios \
+	NAGIOS_GROUP=nagios \
+	NAGIOS_CMDUSER=nagios \
+	NAGIOS_CMDGROUP=nagios \
+	NAGIOS_FQDN=nagios.example.com \
+	NAGIOSADMIN_USER=nagiosadmin \
+	NAGIOSADMIN_PASS=nagios \
+	APACHE_RUN_USER=nagios \
+	APACHE_RUN_GROUP=nagios \
+	NAGIOS_TIMEZONE=UTC \
+	DEBIAN_FRONTEND=noninteractive \
+	NG_NAGIOS_CONFIG_FILE=${NAGIOS_HOME}/etc/nagios.cfg \
+	NG_CGI_DIR=${NAGIOS_HOME}/sbin \
+	NG_WWW_DIR=${NAGIOS_HOME}/share/nagiosgraph \
+	NG_CGI_URL=/cgi-bin \
+	NAGIOS_BRANCH=nagios-4.3.4 \
+	NAGIOS_PLUGINS_BRANCH=release-2.2.1 \
+	NRPE_BRANCH=nrpe-3.2.1 \
+	APACHE_LOCK_DIR=/var/run \
+	APACHE_LOG_DIR=/var/log/apache2
 
 RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set-selections  && \
     echo postfix postfix/mynetworks string "127.0.0.0/8" | debconf-set-selections            && \
@@ -83,8 +84,8 @@ RUN echo postfix postfix/main_mailer_type string "'Internet Site'" | debconf-set
     apt-get clean && rm -Rf /var/lib/apt/lists/*
 
 RUN ( egrep -i "^${NAGIOS_GROUP}"    /etc/group || groupadd $NAGIOS_GROUP    )                         && \
-    ( egrep -i "^${NAGIOS_CMDGROUP}" /etc/group || groupadd $NAGIOS_CMDGROUP )
-RUN ( id -u $NAGIOS_USER    || useradd --system -d $NAGIOS_HOME -g $NAGIOS_GROUP    $NAGIOS_USER    )  && \
+    ( egrep -i "^${NAGIOS_CMDGROUP}" /etc/group || groupadd $NAGIOS_CMDGROUP )					       && \
+    ( id -u $NAGIOS_USER    || useradd --system -d $NAGIOS_HOME -g $NAGIOS_GROUP    $NAGIOS_USER    )  && \
     ( id -u $NAGIOS_CMDUSER || useradd --system -d $NAGIOS_HOME -g $NAGIOS_CMDGROUP $NAGIOS_CMDUSER )
 
 RUN cd /tmp                                           && \
@@ -94,11 +95,8 @@ RUN cd /tmp                                           && \
     ./configure                                       && \
     make                                              && \
     make install                                      && \
-    make clean
-
-## Nagios 4.3.1 has leftover debug code which spams syslog every 15 seconds
-## Its fixed in 4.3.2 and the patch can be removed then
-
+    make clean										  && \
+    cd .. && rm -rf qstat
 
 RUN cd /tmp                                                                          && \
     git clone https://github.com/NagiosEnterprises/nagioscore.git -b $NAGIOS_BRANCH  && \
@@ -111,13 +109,14 @@ RUN cd /tmp                                                                     
         --with-command-group=${NAGIOS_CMDGROUP}  \
         --with-nagios-user=${NAGIOS_USER}        \
         --with-nagios-group=${NAGIOS_GROUP}      \
-                                                                                     && \
-    make all                                                                         && \
-    make install                                                                     && \
-    make install-config                                                              && \
-    make install-commandmode                                                         && \
-    make install-webconf                                                             && \
-    make clean
+                                                 && \
+	    make all                                     && \
+    make install                                 && \
+    make install-config                          && \
+    make install-commandmode                     && \
+    make install-webconf                         && \
+    make clean                                   && \
+    cd .. && rm -rf nagioscore
 
 RUN cd /tmp                                                                                   && \
     git clone https://github.com/nagios-plugins/nagios-plugins.git -b $NAGIOS_PLUGINS_BRANCH  && \
@@ -130,7 +129,8 @@ RUN cd /tmp                                                                     
     make install                                                                              && \
     make clean                                                                                && \
     mkdir -p /usr/lib/nagios/plugins                                                          && \
-    ln -sf /opt/nagios/libexec/utils.pm /usr/lib/nagios/plugins
+    ln -sf /opt/nagios/libexec/utils.pm /usr/lib/nagios/plugins                               && \
+    cd .. && rm -rf nagios-plugins
 
 RUN wget -O /opt/nagios/libexec/check_ncpa.py https://raw.githubusercontent.com/NagiosEnterprises/ncpa/v2.0.5/client/check_ncpa.py  && \
     chmod +x /opt/nagios/libexec/check_ncpa.py
@@ -144,19 +144,21 @@ RUN cd /tmp                                                                  && 
                                                                              && \
     make check_nrpe                                                          && \
     cp src/check_nrpe ${NAGIOS_HOME}/libexec/                                && \
-    make clean
+    make clean                                                               && \
+    cd .. && rm -rf nrpe
 
-RUN cd /tmp                                                          && \
-    git clone https://git.code.sf.net/p/nagiosgraph/git nagiosgraph  && \
-    cd nagiosgraph                                                   && \
+RUN cd /tmp                                                          	&& \
+    git clone https://git.code.sf.net/p/nagiosgraph/git nagiosgraph  	&& \
+    cd nagiosgraph                                                   	&& \
     ./install.pl --install                                      \
         --prefix /opt/nagiosgraph                               \
         --nagios-user ${NAGIOS_USER}                            \
         --www-user ${NAGIOS_USER}                               \
         --nagios-perfdata-file ${NAGIOS_HOME}/var/perfdata.log  \
         --nagios-cgi-url /cgi-bin                               \
-                                                                     && \
-    cp share/nagiosgraph.ssi ${NAGIOS_HOME}/share/ssi/common-header.ssi
+                                                                     	&& \
+    cp share/nagiosgraph.ssi ${NAGIOS_HOME}/share/ssi/common-header.ssi && \
+    cd .. && rm -rf nagiosgraph
 
 RUN cd /opt                                                                         && \
     pip install pymssql                                                             && \
@@ -187,60 +189,47 @@ RUN mkdir -p -m 0755 /usr/share/snmp/mibs                     && \
     ln -s ${NAGIOS_HOME}/bin/nagios /usr/local/bin/nagios     && \
     download-mibs && echo "mibs +ALL" > /etc/snmp/snmp.conf
 
-RUN sed -i 's,/bin/mail,/usr/bin/mail,' /opt/nagios/etc/objects/commands.cfg  && \
-    sed -i 's,/usr/usr,/usr,'           /opt/nagios/etc/objects/commands.cfg
-
-RUN cp /etc/services /var/spool/postfix/etc/  && \
-    echo "smtp_address_preference = ipv4" >> /etc/postfix/main.cf
-
-RUN rm -rf /etc/rsyslog.d /etc/rsyslog.conf
-
-RUN rm -rf /etc/sv/getty-5
-
-ADD nagios/nagios.cfg /opt/nagios/etc/nagios.cfg
-ADD nagios/cgi.cfg /opt/nagios/etc/cgi.cfg
-ADD nagios/templates.cfg /opt/nagios/etc/objects/templates.cfg
-ADD nagios/commands.cfg /opt/nagios/etc/objects/commands.cfg
-ADD nagios/localhost.cfg /opt/nagios/etc/objects/localhost.cfg
-
-ADD rsyslog/rsyslog.conf /etc/rsyslog.conf
-
-RUN echo "use_timezone=${NAGIOS_TIMEZONE}" >> /opt/nagios/etc/nagios.cfg
-
-# Copy example config in-case the user has started with empty var or etc
-
-RUN mkdir -p /orig/var && mkdir -p /orig/etc  && \
-    cp -Rp /opt/nagios/var/* /orig/var/       && \
+#combine RUN to decrease count of layers
+RUN sed -i 's,/bin/mail,/usr/bin/mail,' /opt/nagios/etc/objects/commands.cfg 	&& \
+    sed -i 's,/usr/usr,/usr,'           /opt/nagios/etc/objects/commands.cfg  	\
+    																			&& \
+	cp /etc/services /var/spool/postfix/etc/  									&& \
+    echo "smtp_address_preference = ipv4" >> /etc/postfix/main.cf 				\
+    																			&& \
+    rm -rf /etc/rsyslog.d /etc/rsyslog.conf 									\
+    																			&& \
+	rm -rf /etc/sv/getty-5														\
+																				&& \
+	echo "use_timezone=${NAGIOS_TIMEZONE}" >> /opt/nagios/etc/nagios.cfg 		\
+																				&& \
+	a2enmod session 													        && \
+    a2enmod session_cookie  													&& \
+    a2enmod session_crypto  													&& \
+    a2enmod auth_form       													&& \
+    a2enmod request																&& \
+	mkdir -p /orig/var && mkdir -p /orig/etc  									&& \
+    cp -Rp /opt/nagios/var/* /orig/var/       									&& \
     cp -Rp /opt/nagios/etc/* /orig/etc/
 
-RUN a2enmod session         && \
-    a2enmod session_cookie  && \
-    a2enmod session_crypto  && \
-    a2enmod auth_form       && \
-    a2enmod request
 
-ADD nagios.init /etc/sv/nagios/run
-ADD apache.init /etc/sv/apache/run
-ADD postfix.init /etc/sv/postfix/run
-ADD rsyslog.init /etc/sv/rsyslog/run
-ADD start.sh /usr/local/bin/start_nagios
-RUN chmod +x /usr/local/bin/start_nagios
+COPY nagios/* /opt/nagios/etc/
 
-ADD fix-nagiosgraph-multiple-selection.sh /opt/nagiosgraph/etc
+COPY rsyslog/rsyslog.conf /etc/rsyslog.conf
 
-RUN cd /opt/nagiosgraph/etc && \
-    sh fix-nagiosgraph-multiple-selection.sh
+COPY sv /etc/sv
 
-RUN rm /opt/nagiosgraph/etc/fix-nagiosgraph-multiple-selection.sh
+COPY fix-nagiosgraph-multiple-selection.sh /opt/nagiosgraph/etc
 
-# enable all runit services
-RUN ln -s /etc/sv/* /etc/service
+COPY start.sh /usr/local/bin/start_nagios
 
-ENV APACHE_LOCK_DIR /var/run
-ENV APACHE_LOG_DIR /var/log/apache2
-
-#Set ServerName and timezone for Apache
-RUN echo "ServerName ${NAGIOS_FQDN}" > /etc/apache2/conf-available/servername.conf    && \
+RUN chmod +x /usr/local/bin/start_nagios							\
+																	&& \
+	cd /opt/nagiosgraph/etc 										&& \
+    bash fix-nagiosgraph-multiple-selection.sh 						\
+    																&& \
+    rm /opt/nagiosgraph/etc/fix-nagiosgraph-multiple-selection.sh 	&& \
+	ln -s /etc/sv/* /etc/service 									&& \
+	echo "ServerName ${NAGIOS_FQDN}" > /etc/apache2/conf-available/servername.conf    && \
     echo "PassEnv TZ" > /etc/apache2/conf-available/timezone.conf            && \
     ln -s /etc/apache2/conf-available/servername.conf /etc/apache2/conf-enabled/servername.conf    && \
     ln -s /etc/apache2/conf-available/timezone.conf /etc/apache2/conf-enabled/timezone.conf

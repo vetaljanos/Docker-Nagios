@@ -1,3 +1,6 @@
+# my changes
+* optimized docker build - decreased count of layers and layer sizes
+
 # Docker-Nagios
 Docker image for Nagios
 
