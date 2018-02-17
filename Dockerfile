@@ -169,12 +169,11 @@ RUN cd /opt                                                                     
     chmod +x /opt/WL-Nagios-Plugins/check*                                          && \
     chmod +x /opt/JE-Nagios-Plugins/check_mem/check_mem.pl                          && \
     cp /opt/JE-Nagios-Plugins/check_mem/check_mem.pl /opt/nagios/libexec/           && \
-    cp /opt/nagios-mssql/check_mssql_database.py /opt/nagios/libexec/                         && \
-    cp /opt/nagios-mssql/check_mssql_server.py /opt/nagios/libexec/
-
-
-RUN sed -i.bak 's/.*\=www\-data//g' /etc/apache2/envvars
-RUN export DOC_ROOT="DocumentRoot $(echo $NAGIOS_HOME/share)"                         && \
+    cp /opt/nagios-mssql/check_mssql_database.py /opt/nagios/libexec/               && \
+    cp /opt/nagios-mssql/check_mssql_server.py /opt/nagios/libexec/                 \
+                                                                                    && \
+    sed -i.bak 's/.*\=www\-data//g' /etc/apache2/envvars                            && \
+    export DOC_ROOT="DocumentRoot $(echo $NAGIOS_HOME/share)"                         && \
     sed -i "s,DocumentRoot.*,$DOC_ROOT," /etc/apache2/sites-enabled/000-default.conf  && \
     sed -i "s,</VirtualHost>,<IfDefine ENABLE_USR_LIB_CGI_BIN>\nScriptAlias /cgi-bin/ /opt/nagios/sbin/\n</IfDefine>\n</VirtualHost>," /etc/apache2/sites-enabled/000-default.conf  && \
     ln -s /etc/apache2/mods-available/cgi.load /etc/apache2/mods-enabled/cgi.load
@@ -223,6 +222,8 @@ COPY fix-nagiosgraph-multiple-selection.sh /opt/nagiosgraph/etc
 COPY start.sh /usr/local/bin/start_nagios
 
 RUN chmod +x /usr/local/bin/start_nagios							\
+																	&& \
+    chmod -R +x /etc/sv/											\
 																	&& \
 	cd /opt/nagiosgraph/etc 										&& \
     bash fix-nagiosgraph-multiple-selection.sh 						\
